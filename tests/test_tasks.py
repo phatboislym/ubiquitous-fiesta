@@ -9,7 +9,7 @@ from app.models import DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH
 
 
 def create_task(client: TestClient, **fields: Any) -> dict[str, Any]:
-    response = client.post("/tasks", json={"title": "A task", **fields})
+    response = client.post("/v1/tasks", json={"title": "A task", **fields})
     assert response.status_code == 200
     body: dict[str, Any] = response.json()
     return body
@@ -38,7 +38,7 @@ def test_create_returns_the_new_task(client: TestClient) -> None:
 
 def test_create_accepts_optional_fields(client: TestClient) -> None:
     response = client.post(
-        "/tasks",
+        "/v1/tasks",
         json={
             "title": "Ship it",
             "description": "Stage 1",
@@ -81,35 +81,35 @@ def test_create_gives_each_task_a_new_id(client: TestClient) -> None:
     ],
 )
 def test_create_rejects_invalid_body(client: TestClient, body: dict[str, Any]) -> None:
-    response = client.post("/tasks", json=body)
+    response = client.post("/v1/tasks", json=body)
 
     assert response.status_code == 422
     # invalid input never creates data
-    assert client.get("/tasks").json() == []
+    assert client.get("/v1/tasks").json() == []
 
 
 # --- list ---
 
 
 def test_list_is_empty_with_no_tasks(client: TestClient) -> None:
-    assert client.get("/tasks").json() == []
+    assert client.get("/v1/tasks").json() == []
 
 
 def test_list_returns_newest_first(client: TestClient) -> None:
     for title in ["first", "second", "third"]:
         create_task(client, title=title)
 
-    titles = [task["title"] for task in client.get("/tasks").json()]
+    titles = [task["title"] for task in client.get("/v1/tasks").json()]
     assert titles == ["third", "second", "first"]
 
 
 def test_list_filters_by_completed(client: TestClient) -> None:
     for _ in range(3):
         create_task(client)
-    client.post("/tasks/2/complete")
+    client.post("/v1/tasks/2/complete")
 
-    done = client.get("/tasks", params={"completed": True}).json()
-    not_done = client.get("/tasks", params={"completed": False}).json()
+    done = client.get("/v1/tasks", params={"completed": True}).json()
+    not_done = client.get("/v1/tasks", params={"completed": False}).json()
 
     assert [task["id"] for task in done] == [2]
     assert [task["id"] for task in not_done] == [3, 1]
@@ -120,7 +120,7 @@ def test_list_filters_by_completed(client: TestClient) -> None:
 
 def test_get_returns_the_task(client: TestClient) -> None:
     task = create_task(client, title="Find me")
-    assert client.get(f"/tasks/{task['id']}").json() == task
+    assert client.get(f"/v1/tasks/{task['id']}").json() == task
 
 
 # --- update ---
@@ -129,7 +129,7 @@ def test_get_returns_the_task(client: TestClient) -> None:
 def test_update_changes_only_the_fields_sent(client: TestClient) -> None:
     task = create_task(client, title="Old", description="Keep me")
 
-    updated = client.patch(f"/tasks/{task['id']}", json={"title": "New"}).json()
+    updated = client.patch(f"/v1/tasks/{task['id']}", json={"title": "New"}).json()
 
     assert updated["title"] == "New"
     assert updated["description"] == "Keep me"
@@ -139,7 +139,7 @@ def test_update_changes_only_the_fields_sent(client: TestClient) -> None:
 def test_update_can_clear_description(client: TestClient) -> None:
     task = create_task(client, description="Remove me")
 
-    response = client.patch(f"/tasks/{task['id']}", json={"description": None})
+    response = client.patch(f"/v1/tasks/{task['id']}", json={"description": None})
 
     assert response.json()["description"] is None
 
@@ -155,10 +155,10 @@ def test_update_can_clear_description(client: TestClient) -> None:
 def test_update_rejects_invalid_body(client: TestClient, body: dict[str, Any]) -> None:
     task = create_task(client, title="Unchanged")
 
-    response = client.patch(f"/tasks/{task['id']}", json=body)
+    response = client.patch(f"/v1/tasks/{task['id']}", json=body)
 
     assert response.status_code == 422
-    assert client.get(f"/tasks/{task['id']}").json() == task
+    assert client.get(f"/v1/tasks/{task['id']}").json() == task
 
 
 # --- delete ---
@@ -167,8 +167,8 @@ def test_update_rejects_invalid_body(client: TestClient, body: dict[str, Any]) -
 def test_delete_removes_the_task(client: TestClient) -> None:
     task = create_task(client)
 
-    assert client.delete(f"/tasks/{task['id']}").json() is True
-    assert client.get("/tasks").json() == []
+    assert client.delete(f"/v1/tasks/{task['id']}").json() is True
+    assert client.get("/v1/tasks").json() == []
 
 
 # --- complete ---
@@ -177,7 +177,7 @@ def test_delete_removes_the_task(client: TestClient) -> None:
 def test_complete_marks_the_task_done(client: TestClient) -> None:
     task = create_task(client)
 
-    completed = client.post(f"/tasks/{task['id']}/complete").json()
+    completed = client.post(f"/v1/tasks/{task['id']}/complete").json()
 
     assert completed["completed"] is True
     assert completed["completedAt"] is not None
@@ -186,8 +186,8 @@ def test_complete_marks_the_task_done(client: TestClient) -> None:
 def test_complete_is_idempotent(client: TestClient) -> None:
     task = create_task(client)
 
-    first = client.post(f"/tasks/{task['id']}/complete").json()
-    second = client.post(f"/tasks/{task['id']}/complete").json()
+    first = client.post(f"/v1/tasks/{task['id']}/complete").json()
+    second = client.post(f"/v1/tasks/{task['id']}/complete").json()
 
     assert second == first
 
@@ -204,10 +204,10 @@ stage_2 = pytest.mark.xfail(reason="Stage 2: status codes not implemented yet")
 @pytest.mark.parametrize(
     ("method", "path", "body"),
     [
-        pytest.param("GET", "/tasks/999", None, id="get"),
-        pytest.param("PATCH", "/tasks/999", {"title": "x"}, id="update"),
-        pytest.param("DELETE", "/tasks/999", None, id="delete"),
-        pytest.param("POST", "/tasks/999/complete", None, id="complete"),
+        pytest.param("GET", "/v1/tasks/999", None, id="get"),
+        pytest.param("PATCH", "/v1/tasks/999", {"title": "x"}, id="update"),
+        pytest.param("DELETE", "/v1/tasks/999", None, id="delete"),
+        pytest.param("POST", "/v1/tasks/999/complete", None, id="complete"),
     ],
 )
 def test_missing_task_returns_404(
@@ -218,10 +218,10 @@ def test_missing_task_returns_404(
 
 @stage_2
 def test_create_returns_201(client: TestClient) -> None:
-    assert client.post("/tasks", json={"title": "x"}).status_code == 201
+    assert client.post("/v1/tasks", json={"title": "x"}).status_code == 201
 
 
 @stage_2
 def test_delete_returns_204(client: TestClient) -> None:
     task = create_task(client)
-    assert client.delete(f"/tasks/{task['id']}").status_code == 204
+    assert client.delete(f"/v1/tasks/{task['id']}").status_code == 204

@@ -1,10 +1,14 @@
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 
 from app.models import Task, TaskCreate, TaskUpdate
 from app.store import get_store
 
 app = FastAPI(title="Tasker API")
 store = get_store()
+
+# Task routes are versioned. / and /health describe the service, not the API,
+# so they stay unversioned (the deploy health check points at /health).
+v1 = APIRouter(prefix="/v1")
 
 
 @app.get("/")
@@ -19,25 +23,25 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/tasks")
+@v1.post("/tasks")
 def create(data: TaskCreate) -> Task:
     """Create a task. New tasks start uncompleted and get the next free id."""
     return store.create(data)
 
 
-@app.get("/tasks")
+@v1.get("/tasks")
 def _list(completed: bool | None = None) -> list[Task]:
     """List tasks, newest first. Pass `completed` to filter by completion status."""
     return store.list_all(completed)
 
 
-@app.get("/tasks/{id}")
+@v1.get("/tasks/{id}")
 def get(id: int) -> Task | None:
     """Fetch one task by id, or null if no task has that id."""
     return store.get(id)
 
 
-@app.patch("/tasks/{id}")
+@v1.patch("/tasks/{id}")
 def update(id: int, data: TaskUpdate) -> Task | None:
     """Partially update a task: only the fields sent in the body are changed.
 
@@ -46,12 +50,15 @@ def update(id: int, data: TaskUpdate) -> Task | None:
     return store.update(id, data)
 
 
-@app.delete("/tasks/{id}")
+@v1.delete("/tasks/{id}")
 def delete(id: int) -> bool:
     """Delete a task. Returns true if it existed, false otherwise."""
     return store.delete(id)
 
 
-@app.post("/tasks/{id}/complete")
+@v1.post("/tasks/{id}/complete")
 def complete(id: int) -> Task | None:
     return store.complete(id)
+
+
+app.include_router(v1)
